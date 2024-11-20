@@ -2,7 +2,8 @@ import pandas as pd
 from streamlit import columns
 
 # 엑셀 파일 읽기
-file_path = r"공공자전거 대여소 정보(24.6월 기준).csv"
+# 이제 사용 안됩니다!
+file_path = r"공공자전거 대여소 정보(24.6월 기준)-1.csv"
 df = pd.read_csv(file_path, header=0)  # 첫 번째 행을 컬럼 이름으로 사용
 
 # 데이터프레임의 컬럼 확인
