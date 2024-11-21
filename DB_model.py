@@ -1,9 +1,9 @@
 import os
 import subprocess
 
-db_password = '' # 본인의 MySQL DB root password 넣기
+db_password = 'kkero0418' # 본인의 MySQL DB root password 넣기
 
-# init.sql 파일 실행
+"""# init.sql 파일 실행
 def execute_init_sql():
     init_sql_path = "init.sql"  # init.sql 파일 경로
     mysql_command = [
@@ -18,6 +18,7 @@ def execute_init_sql():
 
 execute_init_sql()
 
+"""
 from sqlalchemy import create_engine, Column, Integer, String, DOUBLE
 from sqlalchemy.orm import declarative_base, sessionmaker
 import pandas as pd
