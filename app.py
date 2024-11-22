@@ -1,17 +1,9 @@
-import matplotlib.pyplot as plt
-from matplotlib import font_manager, rc
-import io
-import base64
-from flask import Flask, jsonify, request
+from flask import Flask, request
 from flask_restx import Api, Resource
 from flask_cors import CORS
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-
-# 한글 글꼴 설정
-font_path = "C:/Windows/Fonts/malgun.ttf"  # Windows의 경우 "맑은 고딕" 경로
-font = font_manager.FontProperties(fname=font_path).get_name()
-rc('font', family=font)
+from sqlalchemy.exc import SQLAlchemyError
 
 # Flask 앱 초기화
 app = Flask(__name__)
@@ -36,55 +28,91 @@ engine = create_engine(DATABASE_URL)
 Session = sessionmaker(bind=engine)
 session = Session()
 
-@bike_ns.route('/chart')
-class Chart(Resource):
+
+@bike_ns.route('/stations')
+class Stations(Resource):
     @api.doc(params={'district': '자치구 이름'})
     def get(self):
         """
-        자치구 이름으로 대여소 거치대수를 차트로 반환합니다.
+        자치구 이름으로 해당 자치구의 모든 대여소 목록을 반환합니다.
         """
         district = request.args.get('district')
         if not district:
             return {"message": "자치구 이름을 입력해야 합니다."}, 400
 
-        # 데이터베이스에서 자치구 데이터 가져오기
-        query = text("SELECT station_name, total_slots FROM bike_station WHERE district = :district")
-        result = session.execute(query, {"district": district}).fetchall()
+        try:
+            # 데이터베이스에서 자치구 데이터 가져오기
+            query = text("SELECT station_name FROM bike_station WHERE district = :district")
+            result = session.execute(query, {"district": district}).fetchall()
 
-        if not result:
-            return {"message": "해당 자치구에 대한 데이터가 없습니다."}, 404
+            if not result:
+                return {"message": "해당 자치구에 대한 대여소 데이터가 없습니다."}, 404
 
-        # 데이터 시각화 준비
-        station_names = [row.station_name for row in result]
-        total_slots = [row.total_slots for row in result]
+            # 대여소 이름 목록 추출
+            station_names = [row.station_name for row in result]
 
-        # 차트 생성
-        plt.figure(figsize=(10, 6))
-        plt.barh(station_names, total_slots, color='skyblue')
-        plt.title(f"{district} 거치대수 통계")
-        plt.xlabel("거치대수")
-        plt.ylabel("대여소 이름")
+            return {"stations": station_names}, 200
 
-        # y축 레이블 회전 및 간격 조정
-        plt.yticks(rotation=45)
+        except SQLAlchemyError as e:
+            return {"message": f"데이터베이스 오류: {str(e)}"}, 500
 
-        # y축 레이블 간격 조정
-        plt.gca().yaxis.set_major_locator(plt.MaxNLocator(integer=True, prune='both', nbins=10))
 
-        # 여백 조정
-        plt.subplots_adjust(left=0.2, right=0.8, top=0.9, bottom=0.1)
+@bike_ns.route('/station_info')
+class StationInfo(Resource):
+    @api.doc(params={'station': '대여소 이름'})
+    def get(self):
+        """
+        대여소 이름으로 대여소 거치대수와 근처 대여소 정보를 반환합니다.
+        """
+        station = request.args.get('station')
+        if not station:
+            return {"message": "대여소 이름을 입력해야 합니다."}, 400
 
-        # 레이아웃 조정
-        plt.tight_layout(pad=5.0)
+        try:
+            # 대여소 정보 가져오기
+            query = text("""
+                SELECT station_name, total_slots
+                FROM bike_station
+                WHERE station_name = :station
+                LIMIT 1
+            """)
+            result = session.execute(query, {"station": station}).fetchone()
 
-        # 차트를 이미지로 변환
-        img = io.BytesIO()
-        plt.savefig(img, format='png')
-        img.seek(0)
-        chart_data = base64.b64encode(img.getvalue()).decode('utf-8')
-        img.close()
+            if not result:
+                return {"message": "해당 대여소에 대한 데이터가 없습니다."}, 404
 
-        return {"chart": chart_data}, 200
+            # 대여소 이름과 거치대 수 추출
+            station_name = result.station_name
+            total_slots = result.total_slots
+
+            # 근처 대여소 데이터 가져오기
+            nearby_query = text("""
+                SELECT station_name, total_slots
+                FROM bike_station
+                WHERE district = (
+                    SELECT district
+                    FROM bike_station
+                    WHERE station_name = :station
+                    LIMIT 1
+                )
+                AND station_name != :station
+                LIMIT 3
+            """)
+            nearby_result = session.execute(nearby_query, {"station": station}).fetchall()
+
+            nearby_stations = [
+                {"station_name": row.station_name, "total_slots": row.total_slots}
+                for row in nearby_result
+            ]
+
+            return {
+                "station_name": station_name,
+                "total_slots": total_slots,
+                "nearby_stations": nearby_stations
+            }, 200
+
+        except SQLAlchemyError as e:
+            return {"message": f"데이터베이스 오류: {str(e)}"}, 500
 
 
 if __name__ == '__main__':
