@@ -46,6 +46,7 @@ current_weather_model = api.model("CurrentWeather", {
     "humidity": fields.Float(description="습도 (%)"),
     "wind_speed": fields.Float(description="풍속 (m/s)"),
     "description": fields.String(description="날씨 설명"),
+    "weather_icon": fields.String(description="날씨 아이콘 URL"),
 })
 
 # RESTx 모델 정의 (5일/3시간 예보)
@@ -55,8 +56,9 @@ forecast_model = api.model("Forecast", {
     "humidity": fields.Float(description="습도 (%)"),
     "wind_speed": fields.Float(description="풍속 (m/s)"),
     "description": fields.String(description="날씨 설명"),
-    "rain_volume": fields.Float(description="강수량 (mm, 3시간)"),  # 추가: 강수량
-    "snow_volume": fields.Float(description="강설량 (mm, 3시간)")   # 추가: 강설량
+    "rain_volume": fields.Float(description="강수량 (mm)", default=0.0),
+    "snow_volume": fields.Float(description="강설량 (mm)", default=0.0),
+    "weather_icon": fields.String(description="날씨 아이콘 URL"),
 })
 
 
@@ -158,7 +160,7 @@ class StationInfo(Resource):
 # 날씨 API
 # -------------------
 
-@weather_ns.route('/current')
+@api.route('/weather/current')
 class CurrentWeather(Resource):
     @api.doc(params={"lat": "위도", "lon": "경도"})
     @api.marshal_with(current_weather_model, skip_none=True)
@@ -185,14 +187,16 @@ class CurrentWeather(Resource):
                 "humidity": data["main"]["humidity"],
                 "wind_speed": data["wind"]["speed"],
                 "description": data["weather"][0]["description"],
+                "weather_icon": f"http://openweathermap.org/img/wn/{data['weather'][0]['icon']}@2x.png",
             }, 200
         except Exception as e:
-            return {"error": f"서버 오류: {str(e)}"}, 500
+            return {"error": f"서버 오류: {str(e)}", "traceback": traceback.format_exc()}, 500
 
 
-import traceback
-
-@weather_ns.route('/forecast')
+# ----------------
+# 5일/3시간 예보 API
+# ----------------
+@api.route('/weather/forecast')
 class WeatherForecast(Resource):
     @api.doc(params={"lat": "위도", "lon": "경도"})
     @api.marshal_list_with(forecast_model, skip_none=True)
@@ -219,10 +223,10 @@ class WeatherForecast(Resource):
                 utc_time = datetime.strptime(forecast["dt_txt"], "%Y-%m-%d %H:%M:%S")
                 kst_time = utc_time + timedelta(hours=9)  # KST = UTC + 9
                 formatted_time = kst_time.strftime("%Y-%m-%d %H:%M:%S")  # 원하는 출력 형식
-                
+
                 # 강수량, 강설량 처리
-                rain_volume = forecast.get("rain", {}).get("3h", 0)  # 3시간 동안의 강수량 (mm)
-                snow_volume = forecast.get("snow", {}).get("3h", 0)  # 3시간 동안의 강설량 (mm)
+                rain_volume = forecast.get("rain", {}).get("3h", 0.0)  # 3시간 동안의 강수량 (mm)
+                snow_volume = forecast.get("snow", {}).get("3h", 0.0)  # 3시간 동안의 강설량 (mm)
 
                 # 예보 데이터 추가
                 forecast_data.append({
@@ -232,15 +236,14 @@ class WeatherForecast(Resource):
                     "wind_speed": forecast["wind"]["speed"],
                     "description": forecast["weather"][0]["description"],
                     "rain_volume": rain_volume,
-                    "snow_volume": snow_volume
+                    "snow_volume": snow_volume,
+                    "weather_icon": f"http://openweathermap.org/img/wn/{forecast['weather'][0]['icon']}@2x.png",
                 })
 
             return forecast_data, 200
         except Exception as e:
-            return {
-                "error": f"서버 오류: {str(e)}",
-                "traceback": traceback.format_exc()
-            }, 500
+            return {"error": f"서버 오류: {str(e)}", "traceback": traceback.format_exc()}, 500
+
 
 
 if __name__ == '__main__':
