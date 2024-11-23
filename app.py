@@ -18,12 +18,12 @@ CORS(app)
 api = Api(app, version="1.0", title="Bike & Weather API", description="통합된 자전거 대여소 및 날씨 API")
 
 # SQLAlchemy 데이터베이스 연결
-DATABASE_URL = 'mysql+pymysql://root:kkero0418@localhost/bike?charset=utf8mb4'
+DATABASE_URL = 'mysql+pymysql://root:@localhost/bike?charset=utf8mb4'
 engine = create_engine(DATABASE_URL)
 Session = sessionmaker(bind=engine)
 
 # OpenWeather API 키 설정 (환경 변수에서 가져오기)
-API_KEY = os.getenv("b185176d52c5df5dd2b8d5ed23d1a75c", "b185176d52c5df5dd2b8d5ed23d1a75c")
+API_KEY = os.getenv("", "") # API_KEY 입력
 
 # 네임스페이스 생성
 bike_ns = api.namespace('stations', description='Bike Station API')
