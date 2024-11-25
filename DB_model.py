@@ -19,7 +19,6 @@ def execute_init_sql():
 
 execute_init_sql()
 '''
-
 from sqlalchemy import create_engine, Column, Integer, String, DOUBLE
 from sqlalchemy.orm import declarative_base, sessionmaker
 import pandas as pd
