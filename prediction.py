@@ -1,11 +1,22 @@
 import numpy as np
 import pandas as pd
+import os
 from tensorflow.keras.models import load_model
 from sklearn.preprocessing import MinMaxScaler
 
 # 모델 및 데이터 로드
 model = load_model('lstm_model_epoch100_batch64.h5')
-data = pd.read_csv('../test/demand_bike_dataset_2022_2024.csv', parse_dates=['대여일자'])
+# CSV 파일들이 저장된 폴더 경로
+folder_path = 'input_data'  # csv 파일이 저장된 디렉토리 경로
+
+# 모든 CSV 파일을 읽어서 하나의 데이터프레임으로 통합
+data = pd.DataFrame()
+
+for file in os.listdir(folder_path):
+    if file.endswith('.csv'):  # 확장자가 .csv인 파일만 선택
+        file_path = os.path.join(folder_path, file)
+        df = pd.read_csv(file_path, parse_dates=['대여일자'])  # 각 파일을 데이터프레임으로 읽기
+        data = pd.concat([data, df], ignore_index=True)  # 데이터프레임 병합
 
 # 데이터 전처리 및 스케일러 설정
 data['대여소번호'] = data['대여소번호'].astype('category').cat.codes
