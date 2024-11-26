@@ -19,12 +19,13 @@ CORS(app)
 api = Api(app, version="1.0", title="Bike & Weather API", description="통합된 자전거 대여소 및 날씨 API")
 
 # SQLAlchemy 데이터베이스 연결
-DATABASE_URL = 'mysql+pymysql://root:@localhost/bike?charset=utf8mb4'
+DATABASE_URL = 'mysql+pymysql://root:kkero0418@localhost/bike?charset=utf8mb4'
 engine = create_engine(DATABASE_URL)
 Session = sessionmaker(bind=engine)
 
 # OpenWeather API 키 설정 (환경 변수에서 가져오기)
 API_KEY = os.getenv("", "") # API_KEY 입력
+API_KEY = 'b185176d52c5df5dd2b8d5ed23d1a75c' # API_KEY 입력
 
 # 네임스페이스 생성
 bike_ns = api.namespace('stations', description='Bike Station API')
@@ -113,8 +114,9 @@ class StationInfo(Resource):
 
         session = Session()
         try:
+            # 대여소 정보 쿼리
             query = text("""
-                SELECT station_name, total_slots
+                SELECT station_name, total_slots, latitude, longitude
                 FROM bike_station
                 WHERE station_name = :station
                 LIMIT 1
@@ -126,9 +128,12 @@ class StationInfo(Resource):
 
             station_name = result.station_name
             total_slots = result.total_slots
+            latitude = result.latitude
+            longitude = result.longitude
 
+            # 근처 대여소 정보 쿼리
             nearby_query = text("""
-                SELECT station_name, total_slots
+                SELECT station_name, total_slots, latitude, longitude
                 FROM bike_station
                 WHERE district = (
                     SELECT district
@@ -142,13 +147,20 @@ class StationInfo(Resource):
             nearby_result = session.execute(nearby_query, {"station": station}).fetchall()
 
             nearby_stations = [
-                {"station_name": row.station_name, "total_slots": row.total_slots}
+                {
+                    "station_name": row.station_name,
+                    "total_slots": row.total_slots,
+                    "latitude": row.latitude,
+                    "longitude": row.longitude
+                }
                 for row in nearby_result
             ]
 
             return {
                 "station_name": station_name,
                 "total_slots": total_slots,
+                "latitude": latitude,
+                "longitude": longitude,
                 "nearby_stations": nearby_stations
             }, 200
         except SQLAlchemyError as e:
@@ -248,4 +260,4 @@ class WeatherForecast(Resource):
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0', port=5000)
