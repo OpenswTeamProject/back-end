@@ -11,6 +11,8 @@ import json  # JSON 처리 모듈 추가
 from datetime import datetime, timedelta
 import pytz
 
+from prediction import predict_bike_rental
+
 # Flask 앱 초기화
 app = Flask(__name__)
 CORS(app)
@@ -19,7 +21,7 @@ CORS(app)
 api = Api(app, version="1.0", title="Bike & Weather API", description="통합된 자전거 대여소 및 날씨 API")
 
 # SQLAlchemy 데이터베이스 연결
-DATABASE_URL = 'mysql+pymysql://root:kkero0418@localhost/bike?charset=utf8mb4'
+DATABASE_URL = 'mysql+pymysql://root:1234@localhost/bike?charset=utf8mb4'
 engine = create_engine(DATABASE_URL)
 Session = sessionmaker(bind=engine)
 
@@ -63,10 +65,42 @@ forecast_model = api.model("Forecast", {
     "weather_icon": fields.String(description="날씨 아이콘 URL"),
 })
 
+# --------------------
+# AI API 모델 정의    |
+# --------------------
 
-# -------------------
-# 자전거 대여소 API
-# -------------------
+# 네임스페이스 정의
+ns = api.namespace('predict', description='Prediction operations')
+
+# 입력 모델 정의 (Swagger 문서화에 사용)
+prediction_input_model = ns.model('PredictionInput', {
+    '대여소번호': fields.Integer(required=True, description='대여소 번호'),
+    '대여일자': fields.String(required=True, description='대여 일자 (YYYY-MM-DD)'),
+    '주말': fields.Boolean(required=True, description='주말 여부'),
+    '대중교통': fields.Boolean(required=True, description='대중교통 여부'),
+    '도심_외곽': fields.Boolean(required=True, description='도심 외곽 여부'),
+    '강수량 합산': fields.Float(required=True, description='강수량 합산 (mm)'),
+    '강수 지속시간 합산': fields.Float(required=True, description='강수 지속시간 합산 (시간)'),
+    '평균 기온 평균': fields.Float(required=True, description='평균 기온 (°C)'),
+    '최고 기온 평균': fields.Float(required=True, description='최고 기온 (°C)'),
+    '최저 기온 평균': fields.Float(required=True, description='최저 기온 (°C)'),
+    '평균 습도 평균': fields.Float(required=True, description='평균 습도 (%)'),
+    '최저 습도 평균': fields.Float(required=True, description='최저 습도 (%)'),
+    '평균 풍속 평균': fields.Float(required=True, description='평균 풍속 (m/s)'),
+    '최대 풍속 평균': fields.Float(required=True, description='최대 풍속 (m/s)'),
+    '최대 순간 풍속 평균': fields.Float(required=True, description='최대 순간 풍속 (m/s)'),
+    '계절': fields.String(required=True, description='계절 (봄, 여름, 가을, 겨울)')
+})
+
+# 출력 모델 정의
+prediction_output_model = ns.model('PredictionOutput', {
+    'status': fields.String(description='Response status'),
+    'date' : fields.String(description='Response date'),
+    'predicted_rental': fields.Float(description='Predicted bike rental count')
+})
+# ------------------
+# 자전거 대여소 API  |
+# ------------------
 
 @bike_ns.route('/')
 class StationList(Resource):
@@ -257,7 +291,38 @@ class WeatherForecast(Resource):
         except Exception as e:
             return {"error": f"서버 오류: {str(e)}", "traceback": traceback.format_exc()}, 500
 
+@ns.route('/')
+class Predict(Resource):
+    @ns.expect(prediction_input_model)  # 입력 모델 연결
+    @ns.response(200, 'Success', model=prediction_output_model)  # 출력 모델 연결
+    @ns.response(400, 'Validation Error')
+    def post(self):
+        """
+        다양한 입력값을 기반으로 자전거 대여 건수를 예측합니다.
+        """
+        
+        """
+        첫날은 현재 날씨 불러 오고, 나머지 4일은 5일 예보 이용 해서 첫날의 날씨 제외하고 불러오기
+        """
+        try:
+            # 요청 데이터 가져오기
+            input_data = request.json
 
+            # 예측 실행
+            predicted_rental = predict_bike_rental(input_data)
+            predicted_rental = float(predicted_rental)
+
+            # 결과 반환
+            return {
+                'status': 'success',
+                'date' : input_data['대여일자'],
+                'predicted_rental': round(predicted_rental, 2)
+            }, 200
+        except Exception as e:
+            return {
+                'status': 'error',
+                'message': str(e)
+            }, 400
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
