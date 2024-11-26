@@ -9,8 +9,10 @@ import requests
 import os
 import json  # JSON 처리 모듈 추가
 from datetime import datetime, timedelta
+import re
 import pytz
-
+from collections import defaultdict
+from datetime import datetime
 from prediction import predict_bike_rental
 
 # Flask 앱 초기화
@@ -218,14 +220,9 @@ class CurrentWeather(Resource):
         if not lat or not lon:
             return {"error": "위도(lat)와 경도(lon)를 모두 제공해야 합니다."}, 400
 
+        data = get_current_weather(lat, lon)
         try:
-            url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={API_KEY}&units=metric"
-            response = requests.get(url)
 
-            if response.status_code != 200:
-                return {"error": f"OpenWeather API 호출 실패: {response.status_code}"}, response.status_code
-
-            data = response.json()
             return {
                 "latitude": float(lat),
                 "longitude": float(lon),
@@ -238,6 +235,16 @@ class CurrentWeather(Resource):
             }, 200
         except Exception as e:
             return {"error": f"서버 오류: {str(e)}", "traceback": traceback.format_exc()}, 500
+
+# 오늘 날짜 날씨 불러오는 api 실행 함수
+def get_current_weather(lat, lon):
+    url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={API_KEY}&units=metric"
+    response = requests.get(url)
+
+    if response.status_code != 200:
+        return {"error": f"OpenWeather API 호출 실패: {response.status_code}"}, response.status_code
+    return response.json()
+
 
 
 # ----------------
@@ -255,14 +262,7 @@ class WeatherForecast(Resource):
             return {"error": "위도(lat)와 경도(lon)를 모두 제공해야 합니다."}, 400
 
         try:
-            url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={API_KEY}&units=metric"
-            response = requests.get(url)
-
-            if response.status_code != 200:
-                return {"error": f"OpenWeather API 호출 실패: {response.status_code}"}, response.status_code
-
-            data = response.json()
-
+            data = get_forecast_weather(lat, lon)
             # UTC -> KST 변환
             kst = pytz.timezone('Asia/Seoul')
             forecast_data = []
@@ -290,6 +290,15 @@ class WeatherForecast(Resource):
             return forecast_data, 200
         except Exception as e:
             return {"error": f"서버 오류: {str(e)}", "traceback": traceback.format_exc()}, 500
+
+# 5일 / 3시간 예보 예측 api 지공 함수
+def get_forecast_weather(lat, lon):
+    url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={API_KEY}&units=metric"
+    response = requests.get(url)
+
+    if response.status_code != 200:
+        return {"error": f"OpenWeather API 호출 실패: {response.status_code}"}, response.status_code
+    return response.json()
 
 @ns.route('/')
 class Predict(Resource):
@@ -323,6 +332,127 @@ class Predict(Resource):
                 'status': 'error',
                 'message': str(e)
             }, 400
+@ns.route('/test')
+class PredictByName(Resource):
+    @api.doc(params={'station': '대여소 이름'})  # 역 데이터 입력 받음
+    @ns.response(200, 'Success', model=prediction_output_model)  # 출력 모델 연결
+    @ns.response(400, 'Validation Error')
+    def post(self):
+        input_data = {}
+        station_name = request.args.get('station')
+        if not station_name:
+            return {"message": "대여소 이름을 입력해야 합니다."}, 400
+
+        session = Session()
+        try:
+            # 대여소 정보 쿼리
+            query = text("""
+                SELECT station_number, station_name, latitude, longitude
+                FROM bike_station
+                WHERE station_name = :station
+                LIMIT 1
+            """)
+
+            result = session.execute(query, {"station": station_name}).fetchone()
+            if not result:
+                return {"message": "해당 대여소에 대한 데이터가 없습니다."}, 404
+
+            station_number = result.station_number
+            latitude = result.latitude
+            longitude = result.longitude
+
+            # 현재 날씨 데이터 가져오기
+            today_weather = get_current_weather(latitude, longitude)
+            today_datetime = datetime.today()
+            today = today_datetime.strftime('%Y-%m-%d')
+            is_weekend = today_datetime.weekday() > 4
+
+            temperature = today_weather["main"]["temp"]
+            humidity = today_weather["main"]["humidity"]
+            wind_speed = today_weather["wind"]["speed"]
+
+            description = today_weather["weather"][0]["description"]
+            rain = 0
+            if description == "light rain":
+                rain = 10.0
+            elif description == "rain":
+                rain = 20.0
+
+            input_data = {
+                '대여소번호': station_number,
+                '대여일자': today,
+                '주말': is_weekend,
+                '대중교통': bool(re.search(r"(역|정류장|버스|지하철|터미널|전철|환승)", result.station_name)),
+                '도심_외곽': False,  # 기본값 설정 (필요시 수정)
+                '강수량 합산': rain,
+                '강수 지속시간 합산': 9 if rain > 0 else 0,
+                '평균 기온 평균': temperature,
+                '최고 기온 평균': temperature,
+                '최저 기온 평균': temperature,
+                '평균 습도 평균': humidity,
+                '최저 습도 평균': humidity,
+                '평균 풍속 평균': wind_speed,
+                '최대 풍속 평균': wind_speed,
+                '최대 순간 풍속 평균': wind_speed + 5,
+                '계절': get_season(today),
+            }
+
+            # 예측 실행
+            predicted_rental = predict_bike_rental(input_data)
+            return {
+                'status': 'success',
+                'date': input_data['대여일자'],
+                'predicted_rental': round(float(predicted_rental), 2)
+            }, 200
+        except Exception as e:
+            return {"message": f"Internal server error: {str(e)}"}, 500
+
+
+
+def get_season(date_str):
+    """
+    주어진 날짜 문자열을 기반으로 계절을 반환
+    :param date_str: 날짜 문자열 (예: "2024-11-27")
+    :return: 계절 (봄, 여름, 가을, 겨울)
+    """
+    # 날짜 문자열을 datetime 객체로 변환
+    date = datetime.strptime(date_str, "%Y-%m-%d")
+    # 날짜의 월과 일 추출
+    month = date.month
+    day = date.day
+
+    # 계절 판단
+    if (month == 3 and day >= 1) or (4 <= month <= 5):
+        return "봄"
+    elif (month == 6 and day >= 1) or (7 <= month <= 8):
+        return "여름"
+    elif (month == 9 and day >= 1) or (10 <= month <= 11):
+        return "가을"
+    else:
+        return "겨울"
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
+
+
+
+"""
+prediction_input_model = ns.model('PredictionInput', {
+    '대여소번호': fields.Integer(required=True, description='대여소 번호'),
+    '대여일자': fields.String(required=True, description='대여 일자 (YYYY-MM-DD)'),
+    '주말': fields.Boolean(required=True, description='주말 여부'),
+    '대중교통': fields.Boolean(required=True, description='대중교통 여부'),
+    '도심_외곽': fields.Boolean(required=True, description='도심 외곽 여부'),
+    '강수량 합산': fields.Float(required=True, description='강수량 합산 (mm)'),
+    '강수 지속시간 합산': fields.Float(required=True, description='강수 지속시간 합산 (시간)'),
+    '평균 기온 평균': fields.Float(required=True, description='평균 기온 (°C)'),
+    '최고 기온 평균': fields.Float(required=True, description='최고 기온 (°C)'),
+    '최저 기온 평균': fields.Float(required=True, description='최저 기온 (°C)'),
+    '평균 습도 평균': fields.Float(required=True, description='평균 습도 (%)'),
+    '최저 습도 평균': fields.Float(required=True, description='최저 습도 (%)'),
+    '평균 풍속 평균': fields.Float(required=True, description='평균 풍속 (m/s)'),
+    '최대 풍속 평균': fields.Float(required=True, description='최대 풍속 (m/s)'),
+    '최대 순간 풍속 평균': fields.Float(required=True, description='최대 순간 풍속 (m/s)'),
+    '계절': fields.String(required=True, description='계절 (봄, 여름, 가을, 겨울)')
+})
+"""
