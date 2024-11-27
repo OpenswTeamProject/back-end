@@ -209,7 +209,7 @@ class StationInfo(Resource):
 # 날씨 API
 # -------------------
 
-@api.route('/weather/current')
+@weather_ns.route('/current')
 class CurrentWeather(Resource):
     @api.doc(params={"lat": "위도", "lon": "경도"})
     @api.marshal_with(current_weather_model, skip_none=True)
@@ -250,7 +250,7 @@ def get_current_weather(lat, lon):
 # ----------------
 # 5일/3시간 예보 API
 # ----------------
-@api.route('/weather/forecast')
+@weather_ns.route('/forecast')
 class WeatherForecast(Resource):
     @api.doc(params={"lat": "위도", "lon": "경도"})
     @api.marshal_list_with(forecast_model, skip_none=True)
@@ -263,31 +263,31 @@ class WeatherForecast(Resource):
 
         try:
             data = get_forecast_weather(lat, lon)
-            # UTC -> KST 변환
-            kst = pytz.timezone('Asia/Seoul')
-            forecast_data = []
-            for forecast in data["list"]:
-                utc_time = datetime.strptime(forecast["dt_txt"], "%Y-%m-%d %H:%M:%S")
-                kst_time = utc_time + timedelta(hours=9)  # KST = UTC + 9
-                formatted_time = kst_time.strftime("%Y-%m-%d %H:%M:%S")  # 원하는 출력 형식
+            # # UTC -> KST 변환
+            # kst = pytz.timezone('Asia/Seoul')
+            # forecast_data = []
+            # for forecast in data["list"]:
+            #     utc_time = datetime.strptime(forecast["dt_txt"], "%Y-%m-%d %H:%M:%S")
+            #     kst_time = utc_time + timedelta(hours=9)  # KST = UTC + 9
+            #     formatted_time = kst_time.strftime("%Y-%m-%d %H:%M:%S")  # 원하는 출력 형식
+            #
+            #     # 강수량, 강설량 처리
+            #     rain_volume = forecast.get("rain", {}).get("3h", 0.0)  # 3시간 동안의 강수량 (mm)
+            #     snow_volume = forecast.get("snow", {}).get("3h", 0.0)  # 3시간 동안의 강설량 (mm)
+            #
+            #     # 예보 데이터 추가
+            #     forecast_data.append({
+            #         "datetime": formatted_time,
+            #         "temperature": forecast["main"]["temp"],
+            #         "humidity": forecast["main"]["humidity"],
+            #         "wind_speed": forecast["wind"]["speed"],
+            #         "description": forecast["weather"][0]["description"],
+            #         "rain_volume": rain_volume,
+            #         "snow_volume": snow_volume,
+            #         "weather_icon": f"http://openweathermap.org/img/wn/{forecast['weather'][0]['icon']}@2x.png",
+            #     })
 
-                # 강수량, 강설량 처리
-                rain_volume = forecast.get("rain", {}).get("3h", 0.0)  # 3시간 동안의 강수량 (mm)
-                snow_volume = forecast.get("snow", {}).get("3h", 0.0)  # 3시간 동안의 강설량 (mm)
-
-                # 예보 데이터 추가
-                forecast_data.append({
-                    "datetime": formatted_time,
-                    "temperature": forecast["main"]["temp"],
-                    "humidity": forecast["main"]["humidity"],
-                    "wind_speed": forecast["wind"]["speed"],
-                    "description": forecast["weather"][0]["description"],
-                    "rain_volume": rain_volume,
-                    "snow_volume": snow_volume,
-                    "weather_icon": f"http://openweathermap.org/img/wn/{forecast['weather'][0]['icon']}@2x.png",
-                })
-
-            return forecast_data, 200
+            return data, 200
         except Exception as e:
             return {"error": f"서버 오류: {str(e)}", "traceback": traceback.format_exc()}, 500
 
@@ -298,47 +298,40 @@ def get_forecast_weather(lat, lon):
 
     if response.status_code != 200:
         return {"error": f"OpenWeather API 호출 실패: {response.status_code}"}, response.status_code
-    return response.json()
+    data = response.json()
 
-@ns.route('/')
-class Predict(Resource):
-    @ns.expect(prediction_input_model)  # 입력 모델 연결
-    @ns.response(200, 'Success', model=prediction_output_model)  # 출력 모델 연결
-    @ns.response(400, 'Validation Error')
-    def post(self):
-        """
-        다양한 입력값을 기반으로 자전거 대여 건수를 예측합니다.
-        """
-        
-        """
-        첫날은 현재 날씨 불러 오고, 나머지 4일은 5일 예보 이용 해서 첫날의 날씨 제외하고 불러오기
-        """
-        try:
-            # 요청 데이터 가져오기
-            input_data = request.json
+    # UTC -> KST 변환
+    kst = pytz.timezone('Asia/Seoul')
+    forecast_data = []
+    for forecast in data["list"]:
+        utc_time = datetime.strptime(forecast["dt_txt"], "%Y-%m-%d %H:%M:%S")
+        kst_time = utc_time + timedelta(hours=9)  # KST = UTC + 9
+        formatted_time = kst_time.strftime("%Y-%m-%d %H:%M:%S")  # 원하는 출력 형식
 
-            # 예측 실행
-            predicted_rental = predict_bike_rental(input_data)
-            predicted_rental = float(predicted_rental)
+        # 강수량, 강설량 처리
+        rain_volume = forecast.get("rain", {}).get("3h", 0.0)  # 3시간 동안의 강수량 (mm)
+        snow_volume = forecast.get("snow", {}).get("3h", 0.0)  # 3시간 동안의 강설량 (mm)
 
-            # 결과 반환
-            return {
-                'status': 'success',
-                'date' : input_data['대여일자'],
-                'predicted_rental': round(predicted_rental, 2)
-            }, 200
-        except Exception as e:
-            return {
-                'status': 'error',
-                'message': str(e)
-            }, 400
-@ns.route('/test')
+        # 예보 데이터 추가
+        forecast_data.append({
+            "datetime": formatted_time,
+            "temperature": forecast["main"]["temp"],
+            "humidity": forecast["main"]["humidity"],
+            "wind_speed": forecast["wind"]["speed"],
+            "description": forecast["weather"][0]["description"],
+            "rain_volume": rain_volume,
+            "snow_volume": snow_volume,
+            "weather_icon": f"http://openweathermap.org/img/wn/{forecast['weather'][0]['icon']}@2x.png",
+        })
+    return forecast_data
+
+
+@ns.route('')
 class PredictByName(Resource):
     @api.doc(params={'station': '대여소 이름'})  # 역 데이터 입력 받음
     @ns.response(200, 'Success', model=prediction_output_model)  # 출력 모델 연결
     @ns.response(400, 'Validation Error')
     def post(self):
-        input_data = {}
         station_name = request.args.get('station')
         if not station_name:
             return {"message": "대여소 이름을 입력해야 합니다."}, 400
@@ -347,7 +340,7 @@ class PredictByName(Resource):
         try:
             # 대여소 정보 쿼리
             query = text("""
-                SELECT station_number, station_name, latitude, longitude
+                SELECT station_number, station_name, district ,latitude, longitude
                 FROM bike_station
                 WHERE station_name = :station
                 LIMIT 1
@@ -382,10 +375,10 @@ class PredictByName(Resource):
                 '대여소번호': station_number,
                 '대여일자': today,
                 '주말': is_weekend,
-                '대중교통': bool(re.search(r"(역|정류장|버스|지하철|터미널|전철|환승)", result.station_name)),
-                '도심_외곽': False,  # 기본값 설정 (필요시 수정)
+                '대중교통': get_transportation(result.station_name),
+                '도심_외곽': is_district(result.district),  # 기본값 설정 (필요시 수정)
                 '강수량 합산': rain,
-                '강수 지속시간 합산': 9 if rain > 0 else 0,
+                '강수 지속시간 합산': 12 if rain > 0 else 0,
                 '평균 기온 평균': temperature,
                 '최고 기온 평균': temperature,
                 '최저 기온 평균': temperature,
@@ -397,23 +390,86 @@ class PredictByName(Resource):
                 '계절': get_season(today),
             }
 
+            forecast_data = get_forecast_weather(latitude, longitude)
+
+            results = get_forecast_input_data(forecast_data, station_number, result.station_name, result.district)
+            # results.append(input_data)
+
             # 예측 실행
-            predicted_rental = predict_bike_rental(input_data)
-            return {
-                'status': 'success',
-                'date': input_data['대여일자'],
-                'predicted_rental': round(float(predicted_rental), 2)
-            }, 200
+            predict_datas = []
+            for result in results:
+                predicted_rental = predict_bike_rental(result)
+                predict_data = {
+                    'status': 'success',
+                    'date': result['대여일자'],
+                    'predicted_rental': round(float(predicted_rental), 2)
+                }
+                predict_datas.append(predict_data)
+            return predict_datas, 200
         except Exception as e:
             return {"message": f"Internal server error: {str(e)}"}, 500
 
+def get_transportation(station_name):
+    return bool(re.search(r"(역|정류장|버스|지하철|터미널|전철|환승)", station_name))
 
+# 자치구 도심 외곽 파악하기
+def is_district(district):
+    return bool(re.search(r"(중구|종로구|용산구|강남구|서초구|영등포구|마포구|송파구|광진구|양천구)", district))
+
+
+# 예보로 데이터 얻어오기
+def get_forecast_input_data(data, station_number, station_name, district):
+    grouped_data = defaultdict(list)
+    for entry in data:
+        # entry["datetime"]의 형식을 문자열로 변환
+        if isinstance(entry["datetime"], str):
+            date = datetime.strptime(entry["datetime"], "%Y-%m-%d %H:%M:%S").strftime('%Y-%m-%d')
+        elif isinstance(entry["datetime"], datetime):
+            date = entry["datetime"].strftime('%Y-%m-%d')
+        elif isinstance(entry["datetime"], datetime.date):
+            date = entry["datetime"].strftime('%Y-%m-%d')
+        else:
+            raise ValueError("Unsupported date format in 'datetime' field")
+
+        grouped_data[date].append(entry)
+
+    # 날짜별 결과 계산
+    results = []
+    for date, entries in grouped_data.items():
+        temperatures = [entry["temperature"] for entry in entries]
+        humidities = [entry["humidity"] for entry in entries]
+        wind_speeds = [entry["wind_speed"] for entry in entries]
+        rain_volumes = [entry.get("rain_volume", 0) for entry in entries]  # 강수량 기본값 0
+
+        # 강수량이 있는지 여부를 확인
+        has_rain = any(rain > 0 for rain in rain_volumes)
+
+        result = {
+            '대여소번호': station_number,
+            '대여일자': date,  # 문자열 형식으로 유지
+            '주말': datetime.strptime(date, '%Y-%m-%d').weekday() > 4,
+            '대중교통': get_transportation(station_name),
+            '도심_외곽': is_district(district),
+            '강수량 합산': sum(rain_volumes),
+            '강수 지속시간 합산': 12 if has_rain else 0,
+            '평균 기온 평균': sum(temperatures) / len(temperatures),
+            '최고 기온 평균': max(temperatures),
+            '최저 기온 평균': min(temperatures),
+            '평균 습도 평균': sum(humidities) / len(humidities),
+            '최저 습도 평균': min(humidities),
+            '평균 풍속 평균': sum(wind_speeds) / len(wind_speeds),
+            '최대 풍속 평균': max(wind_speeds),
+            '최대 순간 풍속 평균': max(wind_speeds),  # 데이터에 순간 풍속 정보 없음
+            '계절': get_season(date),
+        }
+        results.append(result)
+    return results
 
 def get_season(date_str):
     """
-    주어진 날짜 문자열을 기반으로 계절을 반환
-    :param date_str: 날짜 문자열 (예: "2024-11-27")
-    :return: 계절 (봄, 여름, 가을, 겨울)
+        주어진 날짜 문자열을 기반으로 계절을 반환
+        :param date_str: 날짜 문자열 (예: "2024-11-27")
+        :return: 계절 (봄, 여름, 가을, 겨울)
     """
     # 날짜 문자열을 datetime 객체로 변환
     date = datetime.strptime(date_str, "%Y-%m-%d")
