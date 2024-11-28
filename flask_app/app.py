@@ -22,9 +22,9 @@ CORS(app)
 # Flask-RESTx API 초기화
 api = Api(app, version="1.0", title="Bike & Weather API", description="통합된 자전거 대여소 및 날씨 API")
 
-# SQLAlchemy 데이터베이스 연결
-DATABASE_URL = 'mysql+pymysql://root:1234@localhost/bike?charset=utf8mb4'
-engine = create_engine(DATABASE_URL)
+# 환경 변수에서 데이터베이스 URL 읽기
+DATABASE_URL = os.getenv('DATABASE_URL', 'mysql+pymysql://root:1234@mysql:3306/bike?charset=utf8mb4')
+engine = create_engine(DATABASE_URL, connect_args={"local_infile": True})
 Session = sessionmaker(bind=engine)
 
 # OpenWeather API 키 설정 (환경 변수에서 가져오기)

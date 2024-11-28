@@ -1,12 +1,14 @@
 import os
 import subprocess
-
+from sqlalchemy import create_engine, Column, Integer, String, DOUBLE
+from sqlalchemy.orm import declarative_base, sessionmaker
+import pandas as pd
 '''
 db_password = '1234' # 본인의 MySQL DB root password 넣기
 
 # init.sql 파일 실행
 def execute_init_sql():
-    init_sql_path = "init.sql"  # init.sql 파일 경로
+    init_sql_path = "../input_DB/init.sql"  # init.sql 파일 경로
     mysql_command = [
         "mysql", "-u", "root", f'$-p{db_password}',  # MySQL root 사용자와 비밀번호 입력
         "-e", f"source {init_sql_path}"
@@ -19,10 +21,6 @@ def execute_init_sql():
 
 execute_init_sql()
 '''
-from sqlalchemy import create_engine, Column, Integer, String, DOUBLE
-from sqlalchemy.orm import declarative_base, sessionmaker
-import pandas as pd
-
 # 데이터베이스 기본 설정
 Base = declarative_base()
 
@@ -44,13 +42,14 @@ class BikeStation(Base):
     total_slots = Column(Integer, nullable=False)                       # 거치대수 합계
 
 # 데이터베이스 연결
-engine = create_engine('mysql+pymysql://admin_bike:1234@localhost/bike?charset=utf8mb4')  # DB 연결 문자열
+DATABASE_URL = os.getenv('DATABASE_URL', 'mysql+pymysql://root:1234@mysql:3306/bike?charset=utf8mb4')
+engine = create_engine(DATABASE_URL, connect_args={"local_infile": True})
 Base.metadata.create_all(engine)  # 테이블 생성
 Session = sessionmaker(bind=engine)
 session = Session()
 
 # CSV 파일 읽기
-csv_file = 'bike_station.csv'
+csv_file = 'input_DB/bike_station.csv'
 data = pd.read_csv(csv_file)
 
 # 데이터 삽입

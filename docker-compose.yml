@@ -1,0 +1,40 @@
+version: "3.8"
+
+services:
+  flask-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: flask-app
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/app
+    environment:
+      - FLASK_ENV=development
+      - DATABASE_HOST=mysql
+      - DATABASE_USER=root
+      - DATABASE_PASSWORD=1234
+      - DATABASE_NAME=bike
+    depends_on:
+      - mysql
+    command: >
+      bash -c "until mysqladmin ping -h mysql --silent; do echo 'Waiting for MySQL...'; sleep 2; done && python flask_app/DB_model.py && python flask_app/app.py"
+  
+
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: 1234
+      MYSQL_DATABASE: bike
+    ports:
+      - "3307:3306"
+    command:
+      --local-infile=1
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+volumes:
+  mysql_data:
