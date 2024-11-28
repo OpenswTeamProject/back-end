@@ -4,19 +4,9 @@ Open SW Team Project - Backend API server
 ---
 
 ### 실행 방법
-python 버전 3.10에서 실행 가능<br>
-실행 전 가상 환경 생성을 추천.
+docker 설정 완료해서 정상적으로 사용 가능합니다.
 ```angular2html
-pip install -r requirements.txt
+docker-compose up ==build
 ```
-
-1. DB를 삽입하기 전인 경우
-```angular2html
-python DB_model.py
-python app.py
-```
-
-2. DB를 만든 경우
-```angular2html
-python app.py
-```
+현재는 쿠버네티스 설정을 하지 않았기 때문에<br>
+모든 API의 엔드포인트 정보는 localhost:5000으로 시작합니다.
