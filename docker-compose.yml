@@ -2,9 +2,7 @@ version: "3.8"
 
 services:
   flask-app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: chyun7114/opensw-project:latest
     container_name: flask-app
     ports:
       - "5000:5000"
