@@ -25,6 +25,13 @@ spec:
           volumeMounts:
             - mountPath: /var/lib/mysql
               name: mysql-data
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "1Gi"
+              cpu: "1"
       volumes:
         - name: mysql-data
           persistentVolumeClaim:
@@ -43,6 +50,7 @@ spec:
       port: 3306
       targetPort: 3306
   clusterIP: None
+
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -80,6 +88,13 @@ spec:
             - "bash"
             - "-c"
             - "until mysqladmin ping -h mysql --silent; do echo 'Waiting for MySQL...'; sleep 2; done && python flask_app/DB_model.py && python flask_app/app.py"
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "1Gi"
+              cpu: "1"
 
 ---
 apiVersion: v1
@@ -94,6 +109,7 @@ spec:
       port: 5000
       nodePort: 31234  # 외부에서 접근할 수 있는 포트
   type: NodePort
+
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
