@@ -81,13 +81,6 @@ spec:
             - "bash"
             - "-c"
             - "until mysqladmin ping -h mysql --silent; do echo 'Waiting for MySQL...'; sleep 2; done && python flask_app/DB_model.py && python flask_app/app.py"
-          resources:
-            requests:
-              memory: "512Mi"
-              cpu: "500m"
-            limits:
-              memory: "1Gi"
-              cpu: "1"
 
 ---
 apiVersion: v1
