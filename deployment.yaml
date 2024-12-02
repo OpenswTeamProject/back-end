@@ -1,70 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: flask-app
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: flask-app
-  template:
-    metadata:
-      labels:
-        app: flask-app
-    spec:
-      containers:
-      - name: flask-app
-        image: chyun7114/opensw-project:latest
-        ports:
-        - containerPort: 5000
-        env:
-        - name: FLASK_ENV
-          value: "development"
-        - name: DATABASE_URL
-          value: "mysql+pymysql://root:1234@mysql-service:3306/bike?charset=utf8mb4"
-        - name: DATABASE_HOST
-          value: "mysql-service"
-        - name: DATABASE_USER
-          value: "root"
-        - name: DATABASE_PASSWORD
-          value: "1234"
-        - name: DATABASE_NAME
-          value: "bike"
-        volumeMounts:
-        - name: app-volume
-          mountPath: /app
-        command: ["/bin/bash", "-c", "--"]
-        args:
-          - >
-            until mysqladmin ping -h mysql-service --silent;
-            do echo "Waiting for MySQL...";
-            sleep 2;
-            done &&
-            python flask_app/DB_model.py &&
-            python flask_app/app.py
-      volumes:
-      - name: app-volume
-        hostPath:
-          path: /app
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: flask-service
-spec:
-  selector:
-    app: flask-app
-  ports:
-  - protocol: TCP
-    port: 5000
-    targetPort: 5000
-    nodePort: 31234
-  type: NodePort
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: mysql
+  name: mysql-deployment
 spec:
   replicas: 1
   selector:
@@ -76,32 +13,95 @@ spec:
         app: mysql
     spec:
       containers:
-      - name: mysql
-        image: mysql:8.0
-        ports:
-        - containerPort: 3306
-        env:
-        - name: MYSQL_ROOT_PASSWORD
-          value: "1234"
-        - name: MYSQL_DATABASE
-          value: "bike"
-        args:
-        - "--local-infile=1"
-        volumeMounts:
-        - name: mysql-data
-          mountPath: /var/lib/mysql
+        - name: mysql
+          image: mysql:8.0
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              value: "1234"
+            - name: MYSQL_DATABASE
+              value: "bike"
+          ports:
+            - containerPort: 3306
+          volumeMounts:
+            - mountPath: /var/lib/mysql
+              name: mysql-data
       volumes:
-      - name: mysql-data
-        emptyDir: {}  # PV와 PVC 대신 emptyDir 사용
+        - name: mysql-data
+          persistentVolumeClaim:
+            claimName: mysql-pvc
+
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: mysql-service
+  name: mysql
 spec:
   selector:
     app: mysql
   ports:
-  - protocol: TCP
-    port: 3306
-    targetPort: 3306
+    - protocol: TCP
+      port: 3306
+      targetPort: 3306
+  clusterIP: None
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flask-app-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flask-app
+  template:
+    metadata:
+      labels:
+        app: flask-app
+    spec:
+      containers:
+        - name: flask-app
+          image: chyun7114/opensw-project:latest
+          ports:
+            - containerPort: 5000
+          env:
+            - name: FLASK_ENV
+              value: "development"
+            - name: DATABASE_URL
+              value: "mysql+pymysql://root:1234@mysql:3306/bike?charset=utf8mb4"
+            - name: DATABASE_HOST
+              value: "mysql"
+            - name: DATABASE_USER
+              value: "root"
+            - name: DATABASE_PASSWORD
+              value: "1234"
+            - name: DATABASE_NAME
+              value: "bike"
+          command:
+            - "bash"
+            - "-c"
+            - "until mysqladmin ping -h mysql --silent; do echo 'Waiting for MySQL...'; sleep 2; done && python flask_app/DB_model.py && python flask_app/app.py"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flask-app
+spec:
+  selector:
+    app: flask-app
+  ports:
+    - protocol: TCP
+      port: 5000
+      nodePort: 31234  # 외부에서 접근할 수 있는 포트
+  type: NodePort
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

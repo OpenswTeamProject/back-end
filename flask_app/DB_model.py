@@ -49,7 +49,7 @@ Session = sessionmaker(bind=engine)
 session = Session()
 
 # CSV 파일 읽기
-csv_file = 'input_DB/bike_station.csv'
+csv_file = '/app/input_DB/bike_station.csv'
 data = pd.read_csv(csv_file)
 
 # 데이터 삽입
