@@ -27,8 +27,7 @@ spec:
               name: mysql-data
       volumes:
         - name: mysql-data
-          persistentVolumeClaim:
-            claimName: mysql-pvc
+          emptyDir: {}
 
 ---
 apiVersion: v1
@@ -95,15 +94,3 @@ spec:
       port: 5000
       nodePort: 31234  # 외부에서 접근할 수 있는 포트
   type: NodePort
-
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: mysql-pvc
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi

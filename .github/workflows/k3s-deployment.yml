@@ -1,0 +1,53 @@
+name: Docker Push and Deploy to k3s on GCP
+
+on:
+  push:
+    branches:
+      - main  # main 브랜치에 푸시될 때 트리거
+  pull_request:
+    branches:
+      - main  # main 브랜치로 PR이 생성될 때 트리거
+  workflow_dispatch:  # 수동으로 실행할 수 있도록
+    inputs:
+      branch:
+        description: 'Choose the branch to deploy'
+        required: true
+        default: 'develop'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. 체크아웃
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ github.event.inputs.branch || 'develop' }}  # develop 브랜치 체크아웃
+
+    # 2. Docker Hub 로그인
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}  # Docker Hub 아이디 (GitHub Secrets에 저장)
+        password: ${{ secrets.DOCKER_PASSWORD }}  # Docker Hub 비밀번호 (GitHub Secrets에 저장)
+
+    # 3. Docker 이미지 빌드 및 푸시
+    - name: Build and push Docker image
+      run: |
+        docker build -t ${{ secrets.DOCKER_USERNAME }}/opensw-project:latest .
+        docker push ${{ secrets.DOCKER_USERNAME }}/opensw-project:latest
+
+    # 4. GCP에 SSH 접속하여 kubectl 명령어 실행
+    - name: SSH into GCP instance and deploy using kubectl
+      uses: appleboy/ssh-action@v0.1.7
+      with:
+        host: ${{ secrets.GCP_INSTANCE_IP }}  # GCP 인스턴스의 공인 IP
+        username: ${{ secrets.GCP_SSH_USERNAME }}  # GCP 인스턴스의 사용자명
+        key: ${{ secrets.GCP_SSH_PRIVATE_KEY }}  # GCP 인스턴스의 SSH 비공개 키
+        script: |
+          # Flask 앱 배포의 이미지를 새로운 이미지로 업데이트
+          kubectl set image deployment/flask-app-deployment flask-app=chyun7114/opensw-project:latest
+          
+          # 배포 재시작 (새로운 이미지가 반영되도록)
+          kubectl rollout restart deployment/flask-app-deployment
