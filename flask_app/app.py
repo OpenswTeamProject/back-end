@@ -24,7 +24,12 @@ api = Api(app, version="1.0", title="Bike & Weather API", description="통합된
 
 # 환경 변수에서 데이터베이스 URL 읽기
 DATABASE_URL = os.getenv('DATABASE_URL', 'mysql+pymysql://root:1234@mysql:3306/bike?charset=utf8mb4')
-engine = create_engine(DATABASE_URL, connect_args={"local_infile": True})
+engine = create_engine(DATABASE_URL,
+                       connect_args={"local_infile": True},
+                       pool_size=50,  # 기본 연결 풀 크기
+                       max_overflow=100,  # 오버플로우 연결 수
+                       pool_timeout=100,  # 연결 대기 시간
+                       )
 Session = sessionmaker(bind=engine)
 
 # OpenWeather API 키 설정 (환경 변수에서 가져오기)
