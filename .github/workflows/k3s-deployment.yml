@@ -23,7 +23,7 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v2
       with:
-        ref: ${{ github.event.inputs.branch || 'develop' }}  # develop 브랜치 체크아웃
+        ref: ${{ github.event.inputs.branch || 'main' }}  # develop 브랜치 체크아웃
 
     # 2. Docker Hub 로그인
     - name: Log in to Docker Hub
