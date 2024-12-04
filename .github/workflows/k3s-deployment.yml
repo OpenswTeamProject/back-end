@@ -7,12 +7,6 @@ on:
   pull_request:
     branches:
       - main  # main 브랜치로 PR이 생성될 때 트리거
-  workflow_dispatch:  # 수동으로 실행할 수 있도록
-    inputs:
-      branch:
-        description: 'Choose the branch to deploy'
-        required: true
-        default: 'develop'
 
 jobs:
   build-and-deploy:
@@ -46,8 +40,10 @@ jobs:
         username: ${{ secrets.GCP_SSH_USERNAME }}  # GCP 인스턴스의 사용자명
         key: ${{ secrets.GCP_SSH_PRIVATE_KEY }}  # GCP 인스턴스의 SSH 비공개 키
         script: |
-          # Flask 앱 배포의 이미지를 새로운 이미지로 업데이트
-          kubectl set image deployment/flask-app-deployment flask-app=chyun7114/opensw-project:latest
+          cd back-end
+
+          # 원래 있던 쿠버네티스 모든 서비스 등을 제거
+          kubectl delete all --all
           
-          # 배포 재시작 (새로운 이미지가 반영되도록)
-          kubectl rollout restart deployment/flask-app-deployment
+          # 새로운 이미지로 다시 배포
+          kubectl apply -f deployment.yaml
